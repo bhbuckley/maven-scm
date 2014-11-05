@@ -63,6 +63,8 @@ public class ClearCaseCheckInConsumer
         {
             String fileName = line.substring( beginIndex + 1, line.indexOf( '"', beginIndex + 1 ) );
             checkedInFiles.add( new ScmFile( fileName, ScmFileStatus.CHECKED_IN ) );
+        } else {
+        	logger.warn("Unexpected response from cleartool " + line);
         }
     }
 

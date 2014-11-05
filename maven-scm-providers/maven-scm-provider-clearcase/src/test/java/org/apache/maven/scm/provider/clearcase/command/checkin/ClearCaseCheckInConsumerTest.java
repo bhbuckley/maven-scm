@@ -62,4 +62,40 @@ public class ClearCaseCheckInConsumerTest
         assertEquals( "test.java", scmFile.getPath() );
         assertEquals( ScmFileStatus.CHECKED_IN, scmFile.getStatus() );
     }
+    
+    public void testConsumerLogsWarningWhenClearprompt()
+        throws IOException
+    {
+        InputStream inputStream = getResourceAsStream( "/clearcase/checkin/clearprompt.txt" );
+
+        BufferedReader in = new BufferedReader( new InputStreamReader( inputStream ) );
+
+        String s = in.readLine();
+        
+        // capture any warnings logged
+        final StringBuffer warnings = new StringBuffer();
+        DefaultLog logger = new DefaultLog() {
+
+			@Override
+			public void warn(String content) {
+				super.warn(content);
+				warnings.append(content);
+			}
+        	
+        };
+
+        ClearCaseCheckInConsumer consumer = new ClearCaseCheckInConsumer( logger );
+
+        while ( s != null )
+        {
+            consumer.consumeLine( s );
+
+            s = in.readLine();
+        }
+
+        assertEquals( "Warning was not logged", "Unexpected response from cleartool Do you want to do something?", warnings.toString());
+
+        Collection<ScmFile> entries = consumer.getCheckedInFiles();
+        assertEquals( "Wrong number of entries returned", 0, entries.size() );
+    }
 }
