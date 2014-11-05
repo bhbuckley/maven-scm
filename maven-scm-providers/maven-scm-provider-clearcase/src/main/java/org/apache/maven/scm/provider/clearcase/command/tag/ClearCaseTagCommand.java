@@ -96,6 +96,35 @@ public class ClearCaseTagCommand
                 
                 getLogger().debug( "Executing: " + cl.getWorkingDirectory().getAbsolutePath() + ">>" + cl.toString() );
                 exitCode = commandLineExecutor.executeCommandLine( cl, consumer, stderr );
+                
+                if ( exitCode == 0 && isLabelToVOBRoot() )
+                {
+                    getLogger().debug( "Labelling to VOB Root from : " + cl.getWorkingDirectory().getAbsolutePath() );
+                	
+                    File currDir = cl.getWorkingDirectory();
+                    int dirLabelExitCode = 0;
+                    // recursively label each parent directory until we have a failure (presumably from not being in the VOB)
+                    // TODO: look for more elegant approach
+                    while ( currDir.getParentFile() != null && dirLabelExitCode == 0) {
+                    	ScmFileSet fs = new ScmFileSet( currDir, new File(".") );
+                        Commandline dirCl = createCommandLine( fs, tag );
+                        getLogger().debug(
+                                "Executing: " + dirCl.getWorkingDirectory().getAbsolutePath()
+                                    + ">>" + dirCl.toString() );
+
+                        dirLabelExitCode = commandLineExecutor.executeCommandLine( dirCl, consumer, stderr );
+                    	currDir = currDir.getParentFile();
+                    	if ( dirLabelExitCode != 0 ) 
+                    	{
+                    		executedCommands.append("\n");
+                    		executedCommands.append(dirCl.toString());
+                    	} else {
+                    		getLogger().debug(
+                                    "Stopped executing dur to exitCode from previous command: " + dirCl.getWorkingDirectory().getAbsolutePath()
+                                        + ">>" + dirCl.toString() );
+                    	}
+                    }
+                }
             }
         }
         catch ( CommandLineException ex )
@@ -163,6 +192,14 @@ public class ClearCaseTagCommand
         command.createArg().setValue( tag );
 
         return command;
+    }
+
+    /**
+     * @return the value of the setting property 'labelToVOBRoot'
+     */
+    protected boolean isLabelToVOBRoot()
+    {
+        return settings.isLabelToVOBRoot();
     }
     
     public void setSettings( Settings settings )

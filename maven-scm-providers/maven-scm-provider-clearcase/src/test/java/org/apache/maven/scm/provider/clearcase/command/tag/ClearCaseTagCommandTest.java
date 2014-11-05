@@ -30,6 +30,7 @@ import org.apache.maven.scm.ScmTestCase;
 import org.apache.maven.scm.log.DefaultLog;
 import org.apache.maven.scm.provider.ScmProviderRepositoryStub;
 import org.apache.maven.scm.provider.clearcase.util.CommandLineExecutor;
+import org.apache.maven.scm.providers.clearcase.settings.Settings;
 import org.codehaus.plexus.util.cli.CommandLineException;
 import org.codehaus.plexus.util.cli.Commandline;
 import org.codehaus.plexus.util.cli.StreamConsumer;
@@ -50,45 +51,90 @@ public class ClearCaseTagCommandTest
     
     public void testLabelCommands() 
     	throws Exception
-    	{
-    		CommandLineExecutionRecorder recorder = new CommandLineExecutionRecorder();
-    		
-    		ClearCaseTagCommand command = new ClearCaseTagCommand();
-    		command.setCommandLineExecutor( recorder );
-    		command.setLogger( new DefaultLog() );
-    		
-    		CommandParameters parameters = new CommandParameters();
-    		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
-    		
-            ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory(), new File( "test.java" ) );
-			command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+	{
+    	// just record the commands issued
+		final List<Commandline> commandLines = new ArrayList<Commandline>();
+		CommandLineExecutor recorder = new CommandLineExecutor() {
+
+			public int executeCommandLine(Commandline cl,
+					StreamConsumer systemOut, StreamConsumer systemErr)
+					throws CommandLineException {
+				commandLines.add(cl);
+				return 0;
+			}
 			
-			List<Commandline> commandLines = recorder.getCommandLines();
-			assertEquals("Expected number of commands executed", 2, commandLines.size());
-	        assertCommandLine( "cleartool mklbtype -nc TEST_LABEL_V1.0", getWorkingDirectory(), commandLines.get(0) );
-	        assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 test.java", getWorkingDirectory(), commandLines.get(1) );
-    	}
+		};
+		
+		ClearCaseTagCommand command = new ClearCaseTagCommand();
+		command.setCommandLineExecutor( recorder );
+		command.setLogger( new DefaultLog() );
+		command.setSettings( new Settings() );
+		
+		CommandParameters parameters = new CommandParameters();
+		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
+		
+        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory(), new File( "test.java" ) );
+		command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+		
+		assertEquals("Expected number of commands executed", 2, commandLines.size());
+        assertCommandLine( "cleartool mklbtype -nc TEST_LABEL_V1.0", getWorkingDirectory(), commandLines.get(0) );
+        assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 test.java", getWorkingDirectory(), commandLines.get(1) );
+   	}
     
     /*
-     * Implementation of CommandLineExecutor that just records what commands were requested
+     * Test that we label all directories up to the VOB root dir if the Settings is set to do so
      */
-    class CommandLineExecutionRecorder implements CommandLineExecutor {
+    public void testLabelCommandsWhenLabellingToRoot() 
+        	throws Exception
+	{
+    	// record the commands issued and fail if attempting to work in directory below baseDir (3 dirs deep)
+		final List<Commandline> commandLines = new ArrayList<Commandline>();
+		CommandLineExecutor recorder = new CommandLineExecutor() {
 
-    	private List<Commandline> commandLines = new ArrayList<Commandline>();
-    	private int exitCode = 0;
-    	
-		public int executeCommandLine(Commandline cl, StreamConsumer systemOut,
-				StreamConsumer systemErr) throws CommandLineException {
-			commandLines.add( cl );
-			return exitCode;
-		}
-    	
-		public void setExitCode(int exitCode) {
-			this.exitCode = exitCode;
-		}
+			public int executeCommandLine(Commandline cl,
+					StreamConsumer systemOut, StreamConsumer systemErr)
+					throws CommandLineException {
+				commandLines.add(cl);
+				int exitCode = -1;
+				File currDir = cl.getWorkingDirectory();
+				while ( currDir.getParentFile() != null ) {
+					if ( currDir.getAbsolutePath().equals( getBasedir() ) ) {
+						exitCode = 0;
+						break;
+					}
+					currDir = currDir.getParentFile();
+				}
+				
+				return exitCode;
+			}
+		};
+
+		Settings settings = new Settings();
+		settings.setLabelToVOBRoot(true);
 		
-		public List<Commandline> getCommandLines() {
-			return commandLines;
-		}
-    }
+		ClearCaseTagCommand command = new ClearCaseTagCommand();
+		command.setCommandLineExecutor( recorder );
+		command.setLogger( new DefaultLog() );
+		command.setSettings(settings);
+		
+		CommandParameters parameters = new CommandParameters();
+		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
+		
+        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory(), new File( "test.java" ) );
+		command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+		
+		assertEquals("Expected number of commands executed", 7, commandLines.size());
+        assertCommandLine( "cleartool mklbtype -nc TEST_LABEL_V1.0", getWorkingDirectory(), commandLines.get(0) );
+        assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 test.java", getWorkingDirectory(), commandLines.get(1) );
+        assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 .", getWorkingDirectory(), commandLines.get(2) );
+        assertEquals( "Label current directory", getWorkingDirectory(), commandLines.get(2).getWorkingDirectory() );
+
+        File parentFile = getWorkingDirectory().getParentFile();
+        for ( int i = 3; i < 7; i++) {
+            assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 .", parentFile, commandLines.get(i) );
+            assertEquals( "Label parent directory", parentFile, commandLines.get(i).getWorkingDirectory() );
+            parentFile = parentFile.getParentFile();
+        }
+   	}
+
 }

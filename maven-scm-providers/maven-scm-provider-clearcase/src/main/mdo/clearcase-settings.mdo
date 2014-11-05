@@ -63,6 +63,12 @@
           <type>String</type>
           <description>The format of the USER pattern in lhistory command. For example, it can be "-8.8"</description>
         </field>
+        <field>
+          <name>labelToVOBRoot</name>
+          <version>1.9.3+</version>
+          <type>boolean</type>
+          <description>Do you want to apply labels be on all parent elements from the current location up to the VOB root?</description>
+        </field>
       </fields>
     </class>
   </classes>
