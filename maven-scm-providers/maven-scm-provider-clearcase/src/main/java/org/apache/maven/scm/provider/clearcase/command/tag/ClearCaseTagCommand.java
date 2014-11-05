@@ -30,7 +30,6 @@ import org.apache.maven.scm.command.tag.AbstractTagCommand;
 import org.apache.maven.scm.command.tag.TagScmResult;
 import org.apache.maven.scm.provider.ScmProviderRepository;
 import org.apache.maven.scm.provider.clearcase.command.ClearCaseCommand;
-import org.apache.maven.scm.provider.clearcase.command.checkin.ClearCaseCheckInConsumer;
 import org.codehaus.plexus.util.cli.CommandLineException;
 import org.codehaus.plexus.util.cli.CommandLineUtils;
 import org.codehaus.plexus.util.cli.Commandline;
@@ -63,7 +62,7 @@ public class ClearCaseTagCommand
         }
         Commandline cl = createCommandLine( fileSet, tag );
 
-        ClearCaseCheckInConsumer consumer = new ClearCaseCheckInConsumer( getLogger() );
+        ClearCaseTagConsumer consumer = new ClearCaseTagConsumer( getLogger() );
 
         CommandLineUtils.StringStreamConsumer stderr = new CommandLineUtils.StringStreamConsumer();
 
@@ -101,7 +100,7 @@ public class ClearCaseTagCommand
             return new TagScmResult( cl.toString(), "The cleartool command failed.", stderr.getOutput(), false );
         }
 
-        return new TagScmResult( cl.toString(), consumer.getCheckedInFiles() );
+        return new TagScmResult( cl.toString(), consumer.getTaggedFiles() );
     }
 
     // ----------------------------------------------------------------------
