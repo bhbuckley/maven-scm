@@ -42,6 +42,7 @@ import org.apache.maven.scm.provider.clearcase.command.tag.ClearCaseTagCommand;
 import org.apache.maven.scm.provider.clearcase.command.update.ClearCaseUpdateCommand;
 import org.apache.maven.scm.provider.clearcase.repository.ClearCaseScmProviderRepository;
 import org.apache.maven.scm.provider.clearcase.util.ClearCaseUtil;
+import org.apache.maven.scm.provider.clearcase.util.CommandLineExecutor;
 import org.apache.maven.scm.providers.clearcase.settings.Settings;
 import org.apache.maven.scm.repository.ScmRepositoryException;
 
@@ -63,6 +64,15 @@ public class ClearCaseScmProvider
      * Contains parameters loaded from clearcase-settings.xml
      */
     private Settings settings;
+
+    /**
+     * @plexus.requirement
+     */
+    private CommandLineExecutor commandLineExecutor;
+    
+    /**
+     * @plexus.component role="org.apache.maven.scm.provider.clearcase.util.CommandLineExecutor"
+     */
 
     /** {@inheritDoc} */
     public ScmProviderRepository makeProviderScmRepository( String scmSpecificUrl, char delimiter )
@@ -140,6 +150,8 @@ public class ClearCaseScmProvider
         ClearCaseTagCommand command = new ClearCaseTagCommand();
 
         command.setLogger( getLogger() );
+        command.setSettings( settings );
+        command.setCommandLineExecutor( commandLineExecutor );
 
         return (TagScmResult) command.execute( repository, fileSet, parameters );
     }

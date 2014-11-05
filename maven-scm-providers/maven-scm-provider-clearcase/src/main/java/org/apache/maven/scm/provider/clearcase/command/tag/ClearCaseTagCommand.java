@@ -30,6 +30,8 @@ import org.apache.maven.scm.command.tag.AbstractTagCommand;
 import org.apache.maven.scm.command.tag.TagScmResult;
 import org.apache.maven.scm.provider.ScmProviderRepository;
 import org.apache.maven.scm.provider.clearcase.command.ClearCaseCommand;
+import org.apache.maven.scm.provider.clearcase.util.CommandLineExecutor;
+import org.apache.maven.scm.providers.clearcase.settings.Settings;
 import org.codehaus.plexus.util.cli.CommandLineException;
 import org.codehaus.plexus.util.cli.CommandLineUtils;
 import org.codehaus.plexus.util.cli.Commandline;
@@ -43,6 +45,8 @@ public class ClearCaseTagCommand
     extends AbstractTagCommand
     implements ClearCaseCommand
 {
+    private Settings settings = null;
+    private CommandLineExecutor commandLineExecutor = null;
     
     protected ScmResult executeTagCommand( ScmProviderRepository scmProviderRepository, ScmFileSet fileSet, String tag,
                                            String message )
@@ -60,7 +64,10 @@ public class ClearCaseTagCommand
         {
             getLogger().debug( "executing tag command..." );
         }
+        
+        StringBuffer executedCommands = new StringBuffer();
         Commandline cl = createCommandLine( fileSet, tag );
+        executedCommands.append( cl.toString() );
 
         ClearCaseTagConsumer consumer = new ClearCaseTagConsumer( getLogger() );
 
@@ -81,13 +88,14 @@ public class ClearCaseTagCommand
                                    "Executing: " + newLabelCommandLine.getWorkingDirectory().getAbsolutePath()
                                        + ">>" + newLabelCommandLine.toString() );
             }
-            exitCode = CommandLineUtils.executeCommandLine( newLabelCommandLine,
+            exitCode = commandLineExecutor.executeCommandLine( newLabelCommandLine,
                                                             new CommandLineUtils.StringStreamConsumer(), stderr );
 
             if ( exitCode == 0 )
             {
+                
                 getLogger().debug( "Executing: " + cl.getWorkingDirectory().getAbsolutePath() + ">>" + cl.toString() );
-                exitCode = CommandLineUtils.executeCommandLine( cl, consumer, stderr );
+                exitCode = commandLineExecutor.executeCommandLine( cl, consumer, stderr );
             }
         }
         catch ( CommandLineException ex )
@@ -97,10 +105,10 @@ public class ClearCaseTagCommand
 
         if ( exitCode != 0 )
         {
-            return new TagScmResult( cl.toString(), "The cleartool command failed.", stderr.getOutput(), false );
+            return new TagScmResult( executedCommands.toString(), "The cleartool command failed.", stderr.getOutput(), false );
         }
 
-        return new TagScmResult( cl.toString(), consumer.getTaggedFiles() );
+        return new TagScmResult( executedCommands.toString(), consumer.getTaggedFiles() );
     }
 
     // ----------------------------------------------------------------------
@@ -155,5 +163,15 @@ public class ClearCaseTagCommand
         command.createArg().setValue( tag );
 
         return command;
+    }
+    
+    public void setSettings( Settings settings )
+    {
+        this.settings = settings;
+    }
+    
+    public void setCommandLineExecutor( CommandLineExecutor commandLineExecutor )
+    {
+        this.commandLineExecutor = commandLineExecutor;
     }
 }
