@@ -26,6 +26,7 @@ import java.util.List;
 import org.apache.maven.scm.CommandParameter;
 import org.apache.maven.scm.CommandParameters;
 import org.apache.maven.scm.ScmFileSet;
+import org.apache.maven.scm.ScmResult;
 import org.apache.maven.scm.ScmTestCase;
 import org.apache.maven.scm.log.DefaultLog;
 import org.apache.maven.scm.provider.ScmProviderRepositoryStub;
@@ -136,5 +137,62 @@ public class ClearCaseTagCommandTest
             parentFile = parentFile.getParentFile();
         }
    	}
+        
+    /*
+     * Test behavior when label fails to be applied
+     */
+    public void testLabelOnLockedObjects() 
+        	throws Exception
+	{
+    	// Reports error messages when you try to label and exits with failure code
+    	final List<String> errorMessages = new ArrayList<String>();
+		CommandLineExecutor executor = new CommandLineExecutor() {
+
+			public int executeCommandLine(Commandline cl,
+					StreamConsumer systemOut, StreamConsumer systemErr)
+					throws CommandLineException {
+				if ( cl.toString().contains("mklabel") ) {
+					for (String msg : errorMessages ) {
+						systemErr.consumeLine(msg);
+					}
+					return -1;
+				} else {
+					return 0;
+				}
+			}
+		};
+		errorMessages.add("cleartool: Error: Lock on global branch type 'br1' (in VOB\\Admin_vob) prevents operation 'make label'.");
+		errorMessages.add("cleartool: Error: Object locked except for users: sue_test.");
+		errorMessages.add("cleartool: Error: Trouble applying label to '.\\Folder1\\t1.txt'.");
+
+		Settings settings = new Settings();
+		settings.setLabelToVOBRoot(true);
+		
+		ClearCaseTagCommand command = new ClearCaseTagCommand();
+		command.setCommandLineExecutor( executor );
+		command.setLogger( new DefaultLog() );
+		command.setSettings(settings);
+		
+		CommandParameters parameters = new CommandParameters();
+		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
+		
+        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory(), new File( "test.java" ) );
+		ScmResult result = command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+		
+		// normal behavior is to fail
+		assertFalse("Labelling failed", result.isSuccess());
+		
+		// set the setting to ignore these errors
+		settings.setIgnoreMklabelFailureOnLockedObjects(true);
+		result = command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+		
+		assertTrue("Labelling succeeded when ignoreMklabelFailureOnLockedObjects = true", result.isSuccess());
+
+		// add an error not related to locked objects
+		errorMessages.add("cleartool: Error: Version label of type 'LB1' already on element.");
+		result = command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+		
+		assertFalse("Labelling succeeded when ignoreMklabelFailureOnLockedObjects = true", result.isSuccess());
+}
 
 }

@@ -21,6 +21,7 @@ package org.apache.maven.scm.provider.clearcase.command.tag;
 
 import java.io.File;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.maven.scm.ScmException;
 import org.apache.maven.scm.ScmFileSet;
@@ -30,6 +31,7 @@ import org.apache.maven.scm.command.tag.AbstractTagCommand;
 import org.apache.maven.scm.command.tag.TagScmResult;
 import org.apache.maven.scm.provider.ScmProviderRepository;
 import org.apache.maven.scm.provider.clearcase.command.ClearCaseCommand;
+import org.apache.maven.scm.provider.clearcase.util.ClearCaseUtil;
 import org.apache.maven.scm.provider.clearcase.util.CommandLineExecutor;
 import org.apache.maven.scm.providers.clearcase.settings.Settings;
 import org.codehaus.plexus.util.cli.CommandLineException;
@@ -96,6 +98,28 @@ public class ClearCaseTagCommand
                 
                 getLogger().debug( "Executing: " + cl.getWorkingDirectory().getAbsolutePath() + ">>" + cl.toString() );
                 exitCode = commandLineExecutor.executeCommandLine( cl, consumer, stderr );
+                
+                if ( exitCode != 0 && isIgnoreMklabelFailureOnLockedObjects()) 
+                {
+                	// TODO: is this really the best strategy, or is it better to review the use of an empty fileset and -recurse
+                	// and perhaps use -find ... -exec cleartool pattern instead
+                	String[] output = stderr.getOutput().split(System.getProperty( "line.separator" ));
+                	
+                	int otherErrCtr = 0;
+                	for ( int i=0; i<output.length; i++) {
+                		// TODO: use ClearCaseUtil.getLocalizedResource to look for localized messages
+                		Pattern p = Pattern.compile("(.*Error: Lock on .* prevents operation 'make label'.)|(.*Error: Object locked except for.*)|(.*Error: Trouble applying label to.*)");
+                		if ( ! p.matcher(output[i]).matches() )
+                		{
+                			otherErrCtr++;
+                		}
+                	}
+                	
+                	if ( otherErrCtr == 0 )
+                	{
+                		exitCode = 0;
+                	}
+                }
                 
                 if ( exitCode == 0 && isLabelToVOBRoot() )
                 {
@@ -202,6 +226,14 @@ public class ClearCaseTagCommand
         return settings.isLabelToVOBRoot();
     }
     
+    /**
+     * @return the value of the setting property 'ignoreMklabelFailureOnLockedObjects'
+     */
+    protected boolean isIgnoreMklabelFailureOnLockedObjects()
+    {
+        return settings.isIgnoreMklabelFailureOnLockedObjects();
+    }
+
     public void setSettings( Settings settings )
     {
         this.settings = settings;
