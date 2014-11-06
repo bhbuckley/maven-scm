@@ -65,11 +65,14 @@ public class ClearCaseTagCommandTest
 			}
 			
 		};
+
+		Settings settings = new Settings();
+		settings.setLabelToVOBRoot(false);
 		
 		ClearCaseTagCommand command = new ClearCaseTagCommand();
 		command.setCommandLineExecutor( recorder );
 		command.setLogger( new DefaultLog() );
-		command.setSettings( new Settings() );
+		command.setSettings( settings );
 		
 		CommandParameters parameters = new CommandParameters();
 		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
@@ -166,8 +169,8 @@ public class ClearCaseTagCommandTest
 		errorMessages.add("cleartool: Error: Trouble applying label to '.\\Folder1\\t1.txt'.");
 
 		Settings settings = new Settings();
-		settings.setLabelToVOBRoot(true);
-		
+		settings.setIgnoreMklabelFailureOnLockedObjects(false);
+			
 		ClearCaseTagCommand command = new ClearCaseTagCommand();
 		command.setCommandLineExecutor( executor );
 		command.setLogger( new DefaultLog() );
