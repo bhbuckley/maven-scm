@@ -51,7 +51,7 @@ import org.apache.maven.scm.repository.ScmRepositoryException;
  * @author <a href="mailto:evenisse@apache.org">Emmanuel Venisse</a>
  * @author <a href="mailto:wim.deblauwe@gmail.com">Wim Deblauwe</a>
  *
- * @plexus.component role="org.apache.maven.scm.provider.ScmProvider" role-hint="clearcase"
+ * @plexus.component role="org.apache.maven.scm.provider.ScmProvider" role-hint="clearcase-extended"
  */
 public class ClearCaseScmProvider
     extends AbstractScmProvider

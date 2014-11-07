@@ -31,7 +31,6 @@ import org.apache.maven.scm.command.tag.AbstractTagCommand;
 import org.apache.maven.scm.command.tag.TagScmResult;
 import org.apache.maven.scm.provider.ScmProviderRepository;
 import org.apache.maven.scm.provider.clearcase.command.ClearCaseCommand;
-import org.apache.maven.scm.provider.clearcase.util.ClearCaseUtil;
 import org.apache.maven.scm.provider.clearcase.util.CommandLineExecutor;
 import org.apache.maven.scm.providers.clearcase.settings.Settings;
 import org.codehaus.plexus.util.cli.CommandLineException;
@@ -62,14 +61,20 @@ public class ClearCaseTagCommand
                                            ScmTagParameters scmTagParameters )
         throws ScmException
     {
+    	if ( isLabelEntireVOB() && isLabelToVOBRoot() ) {
+            throw new ScmException( "Cannot have both labelEntireVOB=true and labelToVOBRoot=true." );
+    	}
+    	
+    	if ( isLabelEntireVOB() && ! fileSet.getFileList().isEmpty() ) {
+    		throw new ScmException( "Cannot label specific files when labelEntireVOB=true." );
+    	}
+    	
         if ( getLogger().isDebugEnabled() )
         {
             getLogger().debug( "executing tag command..." );
         }
         
         StringBuffer executedCommands = new StringBuffer();
-        Commandline cl = createCommandLine( fileSet, tag );
-        executedCommands.append( cl.toString() );
 
         ClearCaseTagConsumer consumer = new ClearCaseTagConsumer( getLogger() );
 
@@ -95,7 +100,11 @@ public class ClearCaseTagCommand
 
             if ( exitCode == 0 )
             {
-                
+            	if ( isLabelEntireVOB() ) {
+            		fileSet = new ScmFileSet( findVOBRoot(fileSet.getBasedir()) );
+            	}
+                Commandline cl = createCommandLine( fileSet, tag );
+                executedCommands.append( cl.toString() );
                 getLogger().debug( "Executing: " + cl.getWorkingDirectory().getAbsolutePath() + ">>" + cl.toString() );
                 exitCode = commandLineExecutor.executeCommandLine( cl, consumer, stderr );
                 
@@ -126,27 +135,17 @@ public class ClearCaseTagCommand
                     getLogger().debug( "Labelling to VOB Root from : " + cl.getWorkingDirectory().getAbsolutePath() );
                 	
                     File currDir = cl.getWorkingDirectory();
-                    int dirLabelExitCode = 0;
-                    // recursively label each parent directory until we have a failure (presumably from not being in the VOB)
-                    // TODO: look for more elegant approach
-                    while ( currDir.getParentFile() != null && dirLabelExitCode == 0) {
+                    File vobRootDir = findVOBRoot(currDir);
+                    
+                    while ( currDir.getParentFile() != null && ! currDir.equals(vobRootDir.getParentFile()) ) {
                     	ScmFileSet fs = new ScmFileSet( currDir, new File(".") );
                         Commandline dirCl = createCommandLine( fs, tag );
                         getLogger().debug(
                                 "Executing: " + dirCl.getWorkingDirectory().getAbsolutePath()
                                     + ">>" + dirCl.toString() );
 
-                        dirLabelExitCode = commandLineExecutor.executeCommandLine( dirCl, consumer, stderr );
+                        commandLineExecutor.executeCommandLine( dirCl, consumer, stderr );
                     	currDir = currDir.getParentFile();
-                    	if ( dirLabelExitCode != 0 ) 
-                    	{
-                    		executedCommands.append("\n");
-                    		executedCommands.append(dirCl.toString());
-                    	} else {
-                    		getLogger().debug(
-                                    "Stopped executing dur to exitCode from previous command: " + dirCl.getWorkingDirectory().getAbsolutePath()
-                                        + ">>" + dirCl.toString() );
-                    	}
                     }
                 }
             }
@@ -162,6 +161,28 @@ public class ClearCaseTagCommand
         }
 
         return new TagScmResult( executedCommands.toString(), consumer.getTaggedFiles() );
+    }
+    
+    private File findVOBRoot(File workingDir) throws CommandLineException {
+    	File currDir = workingDir;
+        int dirLabelExitCode = 0;
+        // recursively ls each parent directory until we have a failure (presumably from not being in the VOB)
+        // root of the VOB will be considered to be the last directory that the ls returned exit code 0 in
+        // TODO: look for more elegant approach
+        while ( currDir.getParentFile() != null && dirLabelExitCode == 0) {
+            Commandline command = new Commandline();
+            command.setWorkingDirectory( currDir.getParentFile() );
+
+            command.setExecutable( "cleartool" );
+            command.createArg().setValue( "ls ." );
+
+            dirLabelExitCode = commandLineExecutor.executeCommandLine( command, new CommandLineUtils.StringStreamConsumer(), new CommandLineUtils.StringStreamConsumer() );
+        	if ( dirLabelExitCode == 0 ) 
+        	{
+            	currDir = currDir.getParentFile();
+        	} 
+        }
+        return currDir;
     }
 
     // ----------------------------------------------------------------------
@@ -227,12 +248,20 @@ public class ClearCaseTagCommand
     }
     
     /**
+     * @return the value of the setting property 'labelEntireVOB'
+     */
+    protected boolean isLabelEntireVOB()
+    {
+        return settings.isLabelEntireVOB();
+    }
+
+    /**
      * @return the value of the setting property 'ignoreMklabelFailureOnLockedObjects'
      */
     protected boolean isIgnoreMklabelFailureOnLockedObjects()
     {
         return settings.isIgnoreMklabelFailureOnLockedObjects();
-    }
+    }    
 
     public void setSettings( Settings settings )
     {

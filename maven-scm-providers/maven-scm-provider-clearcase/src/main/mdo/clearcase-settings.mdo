@@ -67,8 +67,15 @@
           <name>labelToVOBRoot</name>
           <version>1.9.3+</version>
           <type>boolean</type>
-          <defaultValue>true</defaultValue>
+          <defaultValue>false</defaultValue>
           <description>Do you want to apply labels be on all parent elements from the current location up to the VOB root?</description>
+        </field>
+        <field>
+          <name>labelEntireVOB</name>
+          <version>1.9.3+</version>
+          <type>boolean</type>
+          <defaultValue>true</defaultValue>
+          <description>Do you want to apply labels be on all visible elements in the VOB?</description>
         </field>
         <field>
           <name>ignoreMklabelFailureOnLockedObjects</name>
