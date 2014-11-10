@@ -25,6 +25,7 @@ import java.util.List;
 
 import org.apache.maven.scm.CommandParameter;
 import org.apache.maven.scm.CommandParameters;
+import org.apache.maven.scm.ScmException;
 import org.apache.maven.scm.ScmFileSet;
 import org.apache.maven.scm.ScmResult;
 import org.apache.maven.scm.ScmTestCase;
@@ -68,6 +69,7 @@ public class ClearCaseTagCommandTest
 
 		Settings settings = new Settings();
 		settings.setLabelToVOBRoot(false);
+		settings.setLabelEntireVOB(false);
 		
 		ClearCaseTagCommand command = new ClearCaseTagCommand();
 		command.setCommandLineExecutor( recorder );
@@ -92,13 +94,18 @@ public class ClearCaseTagCommandTest
         	throws Exception
 	{
     	// record the commands issued and fail if attempting to work in directory below baseDir (3 dirs deep)
-		final List<Commandline> commandLines = new ArrayList<Commandline>();
+		final List<Commandline> mklbtypeCommandLines = new ArrayList<Commandline>();
+		final List<Commandline> mklabelCommandLines = new ArrayList<Commandline>();
 		CommandLineExecutor recorder = new CommandLineExecutor() {
 
 			public int executeCommandLine(Commandline cl,
 					StreamConsumer systemOut, StreamConsumer systemErr)
 					throws CommandLineException {
-				commandLines.add(cl);
+				if ( cl.toString().contains("mklbtype")) {
+					mklbtypeCommandLines.add(cl);
+				} else if (cl.toString().contains("mklabel") ) {
+					mklabelCommandLines.add(cl);
+				}
 				int exitCode = -1;
 				File currDir = cl.getWorkingDirectory();
 				while ( currDir.getParentFile() != null ) {
@@ -115,6 +122,7 @@ public class ClearCaseTagCommandTest
 
 		Settings settings = new Settings();
 		settings.setLabelToVOBRoot(true);
+		settings.setLabelEntireVOB(false);
 		
 		ClearCaseTagCommand command = new ClearCaseTagCommand();
 		command.setCommandLineExecutor( recorder );
@@ -127,20 +135,133 @@ public class ClearCaseTagCommandTest
         ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory(), new File( "test.java" ) );
 		command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
 		
-		assertEquals("Expected number of commands executed", 7, commandLines.size());
-        assertCommandLine( "cleartool mklbtype -nc TEST_LABEL_V1.0", getWorkingDirectory(), commandLines.get(0) );
-        assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 test.java", getWorkingDirectory(), commandLines.get(1) );
-        assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 .", getWorkingDirectory(), commandLines.get(2) );
-        assertEquals( "Label current directory", getWorkingDirectory(), commandLines.get(2).getWorkingDirectory() );
+		assertEquals("Expected number of commands executed", 1, mklbtypeCommandLines.size());
+        assertCommandLine( "cleartool mklbtype -nc TEST_LABEL_V1.0", getWorkingDirectory(), mklbtypeCommandLines.get(0) );
 
-        File parentFile = getWorkingDirectory().getParentFile();
-        for ( int i = 3; i < 7; i++) {
-            assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 .", parentFile, commandLines.get(i) );
-            assertEquals( "Label parent directory", parentFile, commandLines.get(i).getWorkingDirectory() );
+		assertEquals("Expected number of commands executed", 5, mklabelCommandLines.size());
+        assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 test.java", getWorkingDirectory(), mklabelCommandLines.get(0) );
+
+        File parentFile = getWorkingDirectory();
+        for ( int i = 1; i < 5; i++) {
+            assertCommandLine( "cleartool mklabel TEST_LABEL_V1.0 .", parentFile, mklabelCommandLines.get(i) );
+            assertEquals( "Label parent directory", parentFile, mklabelCommandLines.get(i).getWorkingDirectory() );
             parentFile = parentFile.getParentFile();
         }
+
+        assertEquals( "Last directory labelled was root of VOB", new File(getBasedir()), mklabelCommandLines.get(4).getWorkingDirectory() );
    	}
         
+    /*
+     * Test that we label entire VOB
+     */
+    public void testLabelCommandsWhenLabellingEntireVOB() 
+        	throws Exception
+	{
+    	// record the commands issued and fail if attempting to work in directory below baseDir (3 dirs deep)
+		final List<Commandline> mklbtypeCommandLines = new ArrayList<Commandline>();
+		final List<Commandline> mklabelCommandLines = new ArrayList<Commandline>();
+		CommandLineExecutor recorder = new CommandLineExecutor() {
+
+			public int executeCommandLine(Commandline cl,
+					StreamConsumer systemOut, StreamConsumer systemErr)
+					throws CommandLineException {
+				if ( cl.toString().contains("mklbtype")) {
+					mklbtypeCommandLines.add(cl);
+				} else if (cl.toString().contains("mklabel") ) {
+					mklabelCommandLines.add(cl);
+				}
+				int exitCode = -1;
+				File currDir = cl.getWorkingDirectory();
+				while ( currDir.getParentFile() != null ) {
+					if ( currDir.getAbsolutePath().equals( getBasedir() ) ) {
+						exitCode = 0;
+						break;
+					}
+					currDir = currDir.getParentFile();
+				}
+				
+				return exitCode;
+			}
+		};
+
+		Settings settings = new Settings();
+		settings.setLabelToVOBRoot(false);
+		settings.setLabelEntireVOB(true);
+		
+		ClearCaseTagCommand command = new ClearCaseTagCommand();
+		command.setCommandLineExecutor( recorder );
+		command.setLogger( new DefaultLog() );
+		command.setSettings(settings);
+		
+		CommandParameters parameters = new CommandParameters();
+		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
+		
+        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory() );
+		command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+		
+		assertEquals("Expected number of commands executed", 1, mklbtypeCommandLines.size());
+        assertCommandLine( "cleartool mklbtype -nc TEST_LABEL_V1.0", getWorkingDirectory(), mklbtypeCommandLines.get(0) );
+
+        File vobRoot = new File(getBasedir());
+        assertCommandLine( "cleartool mklabel -recurse TEST_LABEL_V1.0 .", vobRoot, mklabelCommandLines.get(0) );
+        assertEquals( "Label current directory", vobRoot, mklabelCommandLines.get(0).getWorkingDirectory() );
+
+   	}
+
+    /*
+     * Should not both label to root and label entire VOB
+     */
+    public void testErrorWhenSettingsConflict() 
+        	throws Exception
+	{
+		Settings settings = new Settings();
+		settings.setLabelToVOBRoot(true);
+		settings.setLabelEntireVOB(true);
+
+		ClearCaseTagCommand command = new ClearCaseTagCommand();
+		command.setLogger( new DefaultLog() );
+		command.setSettings(settings);
+		
+        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory() );
+		CommandParameters parameters = new CommandParameters();
+		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
+		
+		try {
+			command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+			fail("Exception should be thrown if both settings are true");
+		} catch (ScmException e) {
+			assertNotNull("Cause is nested", e.getCause());
+			assertEquals("Cannot have both labelEntireVOB=true and labelToVOBRoot=true.", e.getCause().getMessage());
+		}
+	}
+    
+    /*
+     * Label entire VOB does not make sense if we are labeling a specific fileset
+     */
+    public void testErrorLabellingSpecificElementsButSettingsRequestLabellingEntireVob() 
+        	throws Exception
+	{
+		Settings settings = new Settings();
+		settings.setLabelToVOBRoot(false);
+		settings.setLabelEntireVOB(true);
+
+		ClearCaseTagCommand command = new ClearCaseTagCommand();
+		command.setLogger( new DefaultLog() );
+		command.setSettings(settings);
+		
+        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory(), new File( "test.java" )  );
+		CommandParameters parameters = new CommandParameters();
+		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
+		
+		try {
+			command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
+			fail("Exception should be thrown if attempt to label specific element");
+		} catch (ScmException e) {
+			assertNotNull("Cause is nested", e.getCause());
+			assertEquals("Cannot label specific files when labelEntireVOB=true.", e.getCause().getMessage());
+		}
+	}
+
     /*
      * Test behavior when label fails to be applied
      */
@@ -179,7 +300,7 @@ public class ClearCaseTagCommandTest
 		CommandParameters parameters = new CommandParameters();
 		parameters.setString( CommandParameter.TAG_NAME,  "TEST_LABEL_V1.0"  );
 		
-        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory(), new File( "test.java" ) );
+        ScmFileSet scmFileSet = new ScmFileSet( getWorkingDirectory() );
 		ScmResult result = command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
 		
 		// normal behavior is to fail
@@ -196,6 +317,6 @@ public class ClearCaseTagCommandTest
 		result = command.execute( new ScmProviderRepositoryStub(), scmFileSet, parameters);
 		
 		assertFalse("Labelling succeeded when ignoreMklabelFailureOnLockedObjects = true", result.isSuccess());
-}
+	}
 
 }
